@@ -1,0 +1,112 @@
+```{r}
+
+#Natural language processing
+
+report_data <- read.csv("path_to_report_file.csv")
+
+library(tm)
+library(SnowballC)
+
+documents <- report_data$text_column
+
+clean_documents <- Corpus(VectorSource(documents))
+clean_documents <- tm_map(clean_documents, content_transformer(tolower))
+clean_documents <- tm_map(clean_documents, removePunctuation)
+clean_documents <- tm_map(clean_documents, removeNumbers)
+clean_documents <- tm_map(clean_documents, removeWords, stopwords("chinese"))
+clean_documents <- tm_map(clean_documents, stemDocument)
+
+key_words <- c("房地产", "房价", "房产市场", "经济形势", "政策影响")
+
+library(tidytext)
+library(dplyr)
+
+keywords_in_docs <- clean_documents %>%
+  unnest_tokens(word, text) %>%
+  filter(word %in% key_words) %>%
+  count(word, document = document_number)
+
+
+
+#Naive Bayes Classifier
+library(e1071)
+
+# 分离特征和标签
+features <- keywords_in_docs$word
+labels <- rep(c(0, 1), times=c(sum(keywords_in_docs$keywords_in_docs$V2==2), length(unique(keywords_in_docs$V2)-2)))
+data <- data.frame(features, labels)
+
+# 模型训练与预测
+model_nb <- naiveBayes(labels ~ features, data=data)
+predictions <- predict(model_nb, newdata=data[1:nrow(data)-1])
+
+# 验证结果
+table(predictions, data$labels[1:nrow(data)-1])
+```
+
+
+
+```{r}
+
+#Regression of housing price and foreign trade data
+
+library(ggplot2)
+
+df <- data.frame(
+  housing_price = c(57551, 58419, 58827, 60804, 60345, 63613, 63988, 64197, 65200, 65713, 65384, 66525, 66946, 66177, 70325, 68843, 63503, 62838),
+  foreign_trade = c(3.85, 3.85, 3.92, 3.78, 3.12, 3.65, 4.03, 3.92, 3.88, 4.01, 3.95, 3.9, 3.85, 3.72, 3.81, 3.67, 2.98, 3.54)
+)
+
+ggplot(df, aes(x = housing_price, y = foreign_trade)) +
+  geom_point() +
+  geom_smooth(method = "lm", col = "blue") +
+  labs(title = "Scatterplot of Housing Price vs Foreign Trade Index",
+       x = "Housing Price",
+       y = "Foreign Trade(trillion)") +
+  theme_minimal()
+
+
+install.packages("stats")
+library(stats)
+
+model <- lm(foreign_trade ~ housing_price, data = df)
+summary(model)
+
+```
+
+```{r}
+if(!require(caret)) install.packages(caret)
+library(caret)
+set.seed(123)
+
+sum(is.na(df))
+
+df <- na.omit(df)
+
+# Cross Validation
+train_control <- trainControl(method = "cv", number = 10, savePredictions = "final")
+
+# decision tree
+model_tree <- train(beijing_house_price ~ anti_corruption + unfriendly_actions + real_estate_mentions, 
+                    data = df, method = "rpart", trControl = train_control, tuneLength = 10)
+
+# random forest
+model_rf <- train(beijing_house_price ~ anti_corruption + unfriendly_actions + real_estate_mentions, 
+                  data = df, method = "rf", trControl = train_control, tuneLength = 10)
+
+# Gradient boosting machine
+model_gbm <- train(beijing_house_price ~ anti_corruption + unfriendly_actions + real_estate_mentions, 
+                   data = df, method = "gbm", trControl = train_control, verbose = FALSE, tuneGrid = expand.grid(
+                     interaction.depth = c(1, 3, 5),
+                     n.trees = (1:5) * 50,
+                     shrinkage = 0.1,
+                     n.minobsinnode = 10
+                   ))
+
+print(model_tree)
+print(model_rf)
+print(model_gbm)
+
+
+```
+
